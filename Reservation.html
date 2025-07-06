@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en" x-data="reservationApp()" x-init="init()">   <!-- initializes alpine.js app -->
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hot Pot Haven Reservation</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+  <style>
+    :root { --primary-color: #2c3e50; --secondary-color: #e74c3c; }
+    html { scroll-behavior: smooth; }
+    body { padding-top: 56px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    .hero-section {
+      background: linear-gradient(rgba(0,0,0,0.8), rgba(0,0,0,0.8)), 
+                  url('bgHero.jpg') center/cover no-repeat;
+      min-height: 60vh;
+      display: flex;
+      align-items: center;
+      color: white;
+    }
+    .table-card { transition: all 0.3s ease; cursor: pointer; position: relative; height: 100%; }
+    .table-card:hover { transform: translateY(-5px); box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
+    .table-badge { position: absolute; top: -10px; right: -10px; }
+    .reservation-form { transition: all 0.5s ease; border-radius: 10px; }
+    .nav-link.active { font-weight: bold; color: var(--secondary-color) !important; }
+    footer { background-color: var(--primary-color); }
+    .table-unavailable { opacity: 0.6; cursor: not-allowed; }
+    .alert-unavailable { display: none; }
+    @media (max-width: 768px) {
+      .hero-section { min-height: 40vh; }
+      .hero-section h1 { font-size: 2rem; }
+      .table-card { margin-bottom: 1rem; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Navigation Bar -->
+  <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">   <!-- fixed dark bootstrap navbar -->
+    <div class="container">
+      <a class="navbar-brand" href="#"><i class="bi bi-cup-hot-fill me-2"></i>Hot Pot Haven</a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="navbarNav">
+        <ul class="navbar-nav ms-auto">
+          <li class="nav-item"><a class="nav-link" :class="{ 'active': activeSection === 'home' }" href="homepage.html">Home</a></li>   <!-- link to homepage -->
+          <li class="nav-item"><a class="nav-link" :class="{ 'active': activeSection === 'tables' }" href="#tables">Tables</a></li>
+          <li class="nav-item"><a class="nav-link" :class="{ 'active': activeSection === 'reservation' }" href="#reservation">Reservation</a></li>
+          <li class="nav-item"><a class="nav-link" :class="{ 'active': activeSection === 'contact' }" href="#contact">Contact</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+  
+  <!-- Hero Section -->
+  <section id="hero" class="hero-section">  
+    <div class="container text-center">
+      <h1 class="display-4 fw-bold mb-3">Welcome to Hot Pot Haven</h1>
+      <p class="lead mb-4">Experience authentic steamboat dining with our premium broths and fresh ingredients</p>
+      <a href="#reservation" class="btn btn-danger btn-lg px-4">
+        <i class="bi bi-calendar-check me-2"></i>Book a Table
+      </a>
+    </div>
+  </section>
+
+  <!-- Table Selection Section -->
+  <section id="tables" class="container py-5">
+    <div class="text-center mb-5">
+      <h2 class="fw-bold">Our Tables</h2>
+      <p class="text-muted">Select your preferred table</p>
+    </div>
+    <div class="row row-cols-1 row-cols-md-3 g-4">
+      <template x-for="table in filteredTables" :key="table.id">
+        <div class="col">
+          <div class="table-card p-4 rounded shadow-sm text-center d-flex flex-column justify-content-center"
+            :class="{
+              'bg-success text-white': selectedTable === table.id,
+              'bg-secondary text-white table-unavailable': table.available === false,
+              'bg-white': table.available !== false && selectedTable !== table.id
+            }"  
+            @click="selectTable(table)">
+            <span class="badge bg-dark table-badge" x-text="table.capacity"></span>
+            <h5 class="mb-3">Table <span x-text="table.id"></span></h5>
+            <div class="d-flex justify-content-center gap-2">
+              <template x-if="time">
+                <span class="badge" :class="table.available ? 'bg-success' : 'bg-danger'">
+                  <span x-text="table.available ? 'Available' : 'Booked'"></span>
+                </span>
+              </template>
+              <span class="badge bg-info" x-text="table.location"></span>
+            </div>
+          </div>
+        </div>
+      </template>
+    </div>
+  </section>
+  
+  <!-- Reservation Section -->
+  <section id="reservation" class="container py-5">
+    <div class="text-center mb-5">
+      <h2 class="fw-bold">Make a Reservation</h2>
+      <p class="text-muted">Secure your dining experience</p>
+    </div>
+    
+    <!-- Unavailable Table Alert (shown in reservation section) -->
+    <div x-show="showUnavailableAlert" x-transition class="alert alert-warning text-center mx-auto" style="max-width: 600px;">
+      <i class="bi bi-exclamation-triangle-fill me-2"></i>
+      The table is not available for selected time. Please choose another table or try another date.
+    </div>
+    
+    <div class="row justify-content-center">
+      <div class="col-lg-8">
+        <form class="reservation-form bg-white p-4 shadow rounded">
+          <h4 class="mb-4 text-center">Select Date & Time</h4>
+          <div class="mb-3">
+            <label class="form-label fw-bold">Selected Table</label>
+            <input type="text" class="form-control" 
+                  x-bind:value="selectedTable ? 'Table ' + selectedTable : 'Please select a table first'" 
+                  disabled>
+          </div>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-bold">Date</label>
+              <input type="date" class="form-control" x-model="date" @change="checkAvailability()" required>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-bold">Time</label>
+              <select class="form-select" x-model="time" @change="checkAvailability()" required>
+                <option value="">-- Select Time --</option>
+                <template x-for="slot in timeSlots">
+                  <option :value="slot" x-text="slot"></option>
+                </template>
+              </select>
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-bold">Number of Guests</label>
+            <input type="number" class="form-control" x-model="guests" min="1" max="10" required>
+          </div>
+          <div class="text-center">
+            <button type="button" class="btn btn-primary w-100" 
+                    @click="showBookingForm()" 
+                    :disabled="!canBookTable">
+              <i class="bi bi-bookmark-check me-2"></i>Book Table
+            </button>
+          </div>
+        </form>
+
+        <form x-show="showForm" x-transition @submit.prevent="saveReservation"
+              class="reservation-form bg-white p-4 shadow rounded mt-4">
+          <h4 class="mb-4 text-center">Your Information</h4>
+          <div class="mb-3">
+            <label class="form-label fw-bold">Full Name</label>
+            <input type="text" class="form-control" x-model="name" required>
+          </div>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-bold">Email</label>
+              <input type="email" class="form-control" x-model="email" required>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-bold">Phone Number</label>
+              <input type="tel" class="form-control" x-model="phone" required>
+            </div>
+          </div>
+          <div class="form-check mb-4">
+            <input class="form-check-input" type="checkbox" id="newsletter" x-model="newsletter">
+            <label class="form-check-label" for="newsletter">Subscribe to our newsletter</label>
+          </div>
+          <button class="btn btn-success w-100" type="submit">
+            <i class="bi bi-check-circle me-2"></i>Confirm Reservation
+          </button>
+        </form>
+      </div>
+    </div>
+  </section>
+  
+  <!-- Contact Section -->
+  <section id="contact" class="bg-dark text-white py-5">
+    <div class="container">
+      <div class="text-center mb-5">
+        <h2 class="fw-bold">Contact Us</h2>
+        <p class="text-muted">We'd love to hear from you</p>
+      </div>
+      <div class="row">
+        <div class="col-md-4 mb-4 mb-md-0 text-center">
+          <div class="p-3">
+            <i class="bi bi-geo-alt-fill fs-1 text-danger mb-3"></i>
+            <h5>Location</h5>
+            <p>123 Restaurant Street<br>Foodville, FK 12345</p>
+          </div>
+        </div>
+        <div class="col-md-4 mb-4 mb-md-0 text-center">
+          <div class="p-3">
+            <i class="bi bi-telephone-fill fs-1 text-danger mb-3"></i>
+            <h5>Phone</h5>
+            <p>+1 (234) 567-8900</p>
+            <p>Mon-Fri: 9am-10pm</p>
+          </div>
+        </div>
+        <div class="col-md-4 text-center">
+          <div class="p-3">
+            <i class="bi bi-envelope-fill fs-1 text-danger mb-3"></i>
+            <h5>Email</h5>
+            <p>info@myrestaurant.com</p>
+            <p>reservations@myrestaurant.com</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+  
+  <!-- Footer -->
+  <footer class="py-4">
+    <div class="container">
+      <div class="row align-items-center">
+        <div class="col-md-6 mb-3 mb-md-0">
+          <div class="d-flex align-items-center">
+            <i class="bi bi-cup-hot-fill fs-3 text-danger me-2"></i>
+            <span class="fs-5 fw-bold">MyRestaurant</span>
+          </div>
+        </div>
+        <div class="col-md-6 text-md-end">
+          <div class="social-icons">
+            <a href="#" class="text-white me-3"><i class="bi bi-facebook fs-5"></i></a>
+            <a href="#" class="text-white me-3"><i class="bi bi-instagram fs-5"></i></a>
+            <a href="#" class="text-white me-3"><i class="bi bi-twitter fs-5"></i></a>
+            <a href="#" class="text-white"><i class="bi bi-tiktok fs-5"></i></a>
+          </div>
+        </div>
+      </div>
+      <div class="row mt-3">
+        <div class="col-12 text-center">
+          <p class="small text-white mb-0">&copy; 2023 MyRestaurant. All rights reserved.</p>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Confirmation Modal -->
+  <div class="modal fade" id="confirmationModal" tabindex="-1">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header bg-success text-white">
+          <h5 class="modal-title">Reservation Confirmed!</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p>Thank you, <span x-text="name"></span>!</p>
+          <p>Your reservation details:</p>
+          <ul class="list-group mb-3">
+            <li class="list-group-item d-flex justify-content-between">
+              <span>Table:</span>
+              <span x-text="'Table ' + selectedTable"></span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between">
+              <span>Date:</span>
+              <span x-text="date"></span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between">
+              <span>Time:</span>
+              <span x-text="time"></span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between">
+              <span>Guests:</span>
+              <span x-text="guests"></span>
+            </li>
+          </ul>
+          <p>We've sent a confirmation to <span x-text="email"></span></p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-success" data-bs-dismiss="modal" @click="resetForm">Done</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bootstrap JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+  <!-- Alpine App Logic -->
+  <script>
+    function reservationApp() {
+      return {
+        allTables: [],
+        filteredTables: [],
+        selectedTable: null,
+        date: '',
+        time: '',
+        guests: '',
+        name: '',
+        email: '',
+        phone: '',
+        showForm: false,
+        activeSection: 'home',
+        newsletter: false,
+        canBookTable: false,
+        showUnavailableAlert: false,
+
+        timeSlots: ['11:00 AM','11:30 AM','12:00 PM','12:30 PM','1:00 PM','1:30 PM','5:00 PM','5:30 PM','6:00 PM', '6:30 PM', '7:00 PM', '7:30 PM', '8:00 PM'],
+
+        // Mock reservation data
+        reservations: [
+          { tableId: 2, date: '2025-07-15', time: '6:00 PM' }
+        ],
+
+        init() {
+          this.allTables = [
+            { id: 1, capacity: "2-4", location: "Window" },
+            { id: 2, capacity: "4-6", location: "Center" },
+            { id: 3, capacity: "2-4", location: "Patio" },
+            { id: 4, capacity: "6-8", location: "Private" },
+            { id: 5, capacity: "2-4", location: "Window" },
+            { id: 6, capacity: "4-6", location: "Center" }
+          ];
+          
+          this.filteredTables = [...this.allTables];
+          const today = new Date();
+          this.date = today.toISOString().split('T')[0];
+          
+          window.addEventListener('scroll', this.handleScroll.bind(this));
+        },
+
+        handleScroll() {
+          const sections = ['home', 'tables', 'reservation', 'contact'];
+          const scrollPosition = window.scrollY + 100;
+          
+          for (const section of sections) {
+            const element = document.getElementById(section);
+            if (element.offsetTop <= scrollPosition && 
+                element.offsetTop + element.offsetHeight > scrollPosition) {
+              this.activeSection = section;
+              break;
+            }
+          }
+        },
+
+        isTableBooked(tableId) {
+          return this.reservations.some(res => 
+            res.tableId === tableId && 
+            res.date === this.date && 
+            res.time === this.time
+          );
+        },
+
+        checkAvailability() {
+          if (!this.selectedTable || !this.date || !this.time) {
+            this.canBookTable = false;
+            this.showUnavailableAlert = false;
+            return;
+          }
+          
+          const isBooked = this.isTableBooked(this.selectedTable);
+          
+          if (isBooked) {
+            this.canBookTable = false;
+            this.showUnavailableAlert = true;
+          } else {
+            this.canBookTable = true;
+            this.showUnavailableAlert = false;
+          }
+          
+          this.filterTablesByTime();
+        },
+
+        filterTablesByTime() {
+          if (!this.time) {
+            this.filteredTables = this.allTables.map(table => ({
+              ...table,
+              available: undefined
+            }));
+            return;
+          }
+          
+          this.filteredTables = this.allTables.map(table => ({
+            ...table,
+            available: !this.isTableBooked(table.id)
+          }));
+          
+          if (this.selectedTable && this.isTableBooked(this.selectedTable)) {
+            this.selectedTable = null;
+          }
+        },
+
+        selectTable(table) {
+          if (table.available === false) {
+            this.showUnavailableAlert = true;
+            return;
+          }
+          this.selectedTable = table.id;
+          this.checkAvailability();
+        },
+
+        showBookingForm() {
+          if (!this.canBookTable) return;
+          
+          this.showForm = true;
+          document.getElementById('reservation').scrollIntoView({ behavior: 'smooth' });
+        },
+
+        saveReservation() {
+          this.reservations.push({
+            tableId: this.selectedTable,
+            date: this.date,
+            time: this.time
+          });
+          
+          const modal = new bootstrap.Modal(document.getElementById('confirmationModal'));
+          modal.show();
+        },
+
+        resetForm() {
+          this.selectedTable = null;
+          this.date = '';
+          this.time = '';
+          this.guests = '';
+          this.name = '';
+          this.email = '';
+          this.phone = '';
+          this.showForm = false;
+          this.canBookTable = false;
+          this.showUnavailableAlert = false;
+          this.filterTablesByTime();
+        }
+      }
+    }
+  </script>
+</body>
+</html>
